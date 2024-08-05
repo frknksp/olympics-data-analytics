@@ -1,3 +1,2 @@
 # olympics-data-analytics
-[# olympics-data-analytics
-](https://olympics-data-analytics.streamlit.app/)
+[streamlit app](https://olympics-data-analytics.streamlit.app/)
