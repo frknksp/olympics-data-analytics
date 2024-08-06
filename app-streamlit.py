@@ -26,26 +26,11 @@ country = st.sidebar.selectbox("Select a country", countries, index=countries.in
 include_winter = st.sidebar.checkbox("Include winter months", value=True)
 only_medalists = st.sidebar.checkbox("Only include medalists", value=False)
 
-
 # Filter data
 if country in country_dict:
     filtered_bios = filter_bios(bios, country, country_dict)
     filtered_results = filter_results(results, country, country_dict, include_winter, only_medalists)
     medals_data = get_medals(filtered_results, country, country_dict)
-    
-    # Toplam madalya sayısını hesapla ve ekranda göster
-    if not filtered_results.empty:
-        medals = filtered_results[(filtered_results['medal'].notna()) & (~filtered_results['event'].str.endswith('(YOG)'))]
-        medals_filtered = medals.drop_duplicates(['year', 'type', 'discipline', 'noc', 'event', 'medal'])
-        medals_count = medals_filtered.groupby(['noc'])['medal'].value_counts().loc[country_dict[country]]
-        
-        total_gold = medals_count.get('Gold', 0)
-        total_silver = medals_count.get('Silver', 0)
-        total_bronze = medals_count.get('Bronze', 0)
-        
-        st.write(f"Total Gold Medals: {total_gold}")
-        st.write(f"Total Silver Medals: {total_silver}")
-        st.write(f"Total Bronze Medals: {total_bronze}")
 else:
     st.error(f"No data available for {country}")
     filtered_bios = pd.DataFrame(columns=bios.columns)
@@ -107,3 +92,29 @@ if not filtered_results.empty:
     )
 else:
     st.write("No results data available")
+
+
+# Filter data
+if country in country_dict:
+    filtered_bios = filter_bios(bios, country, country_dict)
+    filtered_results = filter_results(results, country, country_dict, include_winter, only_medalists)
+    medals_data = get_medals(filtered_results, country, country_dict)
+    
+    # Toplam madalya sayısını hesapla ve ekranda göster
+    if not filtered_results.empty:
+        medals = filtered_results[(filtered_results['medal'].notna()) & (~filtered_results['event'].str.endswith('(YOG)'))]
+        medals_filtered = medals.drop_duplicates(['year', 'type', 'discipline', 'noc', 'event', 'medal'])
+        medals_count = medals_filtered.groupby(['noc'])['medal'].value_counts().loc[country_dict[country]]
+        
+        total_gold = medals_count.get('Gold', 0)
+        total_silver = medals_count.get('Silver', 0)
+        total_bronze = medals_count.get('Bronze', 0)
+        
+        st.write(f"Total Gold Medals: {total_gold}")
+        st.write(f"Total Silver Medals: {total_silver}")
+        st.write(f"Total Bronze Medals: {total_bronze}")
+else:
+    st.error(f"No data available for {country}")
+    filtered_bios = pd.DataFrame(columns=bios.columns)
+    filtered_results = pd.DataFrame(columns=results.columns)
+    medals_data = pd.DataFrame(columns=['year', 'medal'])
