@@ -88,6 +88,7 @@ def calculate_medals(filtered_results, country, country_dict):
             st.write(f"Total Gold Medals: {total_gold}")
             st.write(f"Total Silver Medals: {total_silver}")
             st.write(f"Total Bronze Medals: {total_bronze}")
+            st.write(f"Total Medals: {total_gold + total_silver + total_bronze}")
         else:
             st.write("No medals data available for this country")
     else:
