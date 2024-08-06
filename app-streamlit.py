@@ -8,7 +8,7 @@ import pandas as pd
 # utils.py dosyasından fonksiyonları içe aktar
 from utils import load_nocs, load_bios, load_results, filter_bios, filter_results, get_medals
 
-# Load data
+# Veri yükleme
 bios = load_bios()
 results = load_results()
 nocs = load_nocs()
@@ -26,7 +26,7 @@ country = st.sidebar.selectbox("Select a country", countries, index=countries.in
 include_winter = st.sidebar.checkbox("Include winter months", value=True)
 only_medalists = st.sidebar.checkbox("Only include medalists", value=False)
 
-# Filter data
+# Veri filtreleme
 if country in country_dict:
     filtered_bios = filter_bios(bios, country, country_dict)
     filtered_results = filter_results(results, country, country_dict, include_winter, only_medalists)
@@ -37,11 +37,11 @@ else:
     filtered_results = pd.DataFrame(columns=results.columns)
     medals_data = pd.DataFrame(columns=['year', 'medal'])
 
-# Medals plot
+# Madalya grafiği
 st.header("Medals")
 if not medals_data.empty:
     fig, ax = plt.subplots()
-    ax.plot(medals_data['year'], medals_data['medal'],marker='o')
+    ax.plot(medals_data['year'], medals_data['medal'], marker='o')
     ax.set_xlabel('Year')
     ax.set_ylabel('Medal Count')
     ax.set_title('Medals by Year')
@@ -49,7 +49,7 @@ if not medals_data.empty:
 else:
     st.write("No medal data available")
 
-# Heatmap
+# Isı haritası
 st.header("Birthplaces of the athletes")
 if not filtered_bios.empty:
     m = folium.Map(location=[filtered_bios['lat'].mean(), filtered_bios['long'].mean()], zoom_start=2)
@@ -59,7 +59,7 @@ if not filtered_bios.empty:
 else:
     st.write("No athlete birthplace data available")
 
-# Results table
+# Sonuçlar tablosu
 st.header("Results")
 if not filtered_results.empty:
     filtered_results_reset = filtered_results.reset_index(drop=True)
@@ -71,50 +71,30 @@ if not filtered_results.empty:
                 filtered_results_reset[col] = pd.to_numeric(filtered_results_reset[col])
             except ValueError:
                 pass  # Eğer sayısal dönüşüm yapılamazsa, sütunu olduğu gibi bırak
-        elif filtered_results_reset[col].dtype == 'float64':
-            # Eğer sütun float64 tipindeyse ve tüm değerler tam sayıya dönüştürülebiliyorsa
-            if filtered_results_reset[col].apply(lambda x: x.is_integer()).all():
-                filtered_results_reset[col] = filtered_results_reset[col].astype(int)
+        elif filtered_results_reset[col].dtype == 'float64' and filtered_results_reset[col].apply(lambda x: x.is_integer()).all():
+            filtered_results_reset[col] = filtered_results_reset[col].astype(int)
 
-    # DataFrame'i göster ve özel sütun konfigürasyonunu uygula
-    st.dataframe(
-        filtered_results_reset,
-        column_config={
-            "year": st.column_config.NumberColumn(
-                "Year",
-                format="%d"
-            ),
-            "athlete_id": st.column_config.NumberColumn(
-                "Athlete ID",
-                format="%d"
-            )
-        }
-    )
+    # DataFrame'i göster
+    st.dataframe(filtered_results_reset)
 else:
     st.write("No results data available")
 
-
-# Filter data
-if country in country_dict:
-    filtered_bios = filter_bios(bios, country, country_dict)
-    filtered_results = filter_results(results, country, country_dict, include_winter, only_medalists)
-    medals_data = get_medals(filtered_results, country, country_dict)
+# Toplam madalya sayısını hesapla ve ekranda göster
+if not filtered_results.empty:
+    medals = filtered_results[(filtered_results['medal'].notna()) & (~filtered_results['event'].str.endswith('(YOG)'))]
+    medals_filtered = medals.drop_duplicates(['year', 'type', 'discipline', 'noc', 'event', 'medal'])
     
-    # Toplam madalya sayısını hesapla ve ekranda göster
-    if not filtered_results.empty:
-        medals = filtered_results[(filtered_results['medal'].notna()) & (~filtered_results['event'].str.endswith('(YOG)'))]
-        medals_filtered = medals.drop_duplicates(['year', 'type', 'discipline', 'noc', 'event', 'medal'])
+    if country_dict[country] in medals_filtered['noc'].values:
         medals_count = medals_filtered.groupby(['noc'])['medal'].value_counts().loc[country_dict[country]]
-        
+
         total_gold = medals_count.get('Gold', 0)
         total_silver = medals_count.get('Silver', 0)
         total_bronze = medals_count.get('Bronze', 0)
-        
+
         st.write(f"Total Gold Medals: {total_gold}")
         st.write(f"Total Silver Medals: {total_silver}")
         st.write(f"Total Bronze Medals: {total_bronze}")
+    else:
+        st.write("No medals data available for this country")
 else:
-    st.error(f"No data available for {country}")
-    filtered_bios = pd.DataFrame(columns=bios.columns)
-    filtered_results = pd.DataFrame(columns=results.columns)
-    medals_data = pd.DataFrame(columns=['year', 'medal'])
+    st.write("No results data available")
