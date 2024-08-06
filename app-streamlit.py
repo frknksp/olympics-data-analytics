@@ -1,80 +1,109 @@
 import streamlit as st
 import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-from pathlib import Path
 import folium
 from folium.plugins import HeatMap
 from streamlit_folium import folium_static
+import pandas as pd
 
-# Veri yolları ve yükleme
-directory = Path(__file__).parent
-nocs = pd.read_csv(directory / "clean-data" / "noc_regions.csv")
+# utils.py dosyasından fonksiyonları içe aktar
+from utils import load_nocs, load_bios, load_results, filter_bios, filter_results, get_medals
 
+# Load data
+bios = load_bios()
+results = load_results()
+nocs = load_nocs()
+
+# Veri işleme
 nocs['region'] = nocs['region'].astype(str)
 country_dict = dict(zip(nocs['region'], nocs['NOC']))
 countries = sorted(nocs['region'].unique().tolist())
 
-# Yardımcı fonksiyonlar
-@st.cache_data
-def load_bios():
-    return pd.read_csv(directory / "clean-data" / "bios_locs.csv")
-
-@st.cache_data
-def load_results():
-    return pd.read_csv(directory / "clean-data" / "results.csv")
-
-def filter_bios(bios, country):
-    bios = bios[bios['born_country'] == country_dict[country]]
-    return bios[bios['lat'].notna() & bios['long'].notna()]
-
-def filter_results(df, country, include_winter, only_medalists):
-    df = df[df['noc'] == country_dict[country]]
-    if not include_winter:
-        df = df[df['type'] == 'Summer']
-    if only_medalists:
-        df = df[df['medal'].notna()]
-    return df
-
-def get_medals(results, country):
-    medals = results[(results['medal'].notna()) & (~results['event'].str.endswith('(YOG)'))]
-    medals_filtered = medals.drop_duplicates(['year','type','discipline','noc','event','medal'])
-    models_by_year = medals_filtered.groupby(['noc','year'])['medal'].count().loc[country_dict[country]]
-    return models_by_year.reset_index()
-
 # Streamlit UI
-st.title("Olympic Data Analysis")
+st.markdown("<h1 style='text-align: center;'>Olympic Data Analysis</h1>", unsafe_allow_html=True)
 
 # Sidebar
 country = st.sidebar.selectbox("Select a country", countries, index=countries.index("Turkey"))
 include_winter = st.sidebar.checkbox("Include winter months", value=True)
 only_medalists = st.sidebar.checkbox("Only include medalists", value=False)
 
-# Load data
-bios = load_bios()
-results = load_results()
 
 # Filter data
-filtered_bios = filter_bios(bios, country)
-filtered_results = filter_results(results, country, include_winter, only_medalists)
-medals_data = get_medals(filtered_results, country)
+if country in country_dict:
+    filtered_bios = filter_bios(bios, country, country_dict)
+    filtered_results = filter_results(results, country, country_dict, include_winter, only_medalists)
+    medals_data = get_medals(filtered_results, country, country_dict)
+    
+    # Toplam madalya sayısını hesapla ve ekranda göster
+    if not filtered_results.empty:
+        medals = filtered_results[(filtered_results['medal'].notna()) & (~filtered_results['event'].str.endswith('(YOG)'))]
+        medals_filtered = medals.drop_duplicates(['year', 'type', 'discipline', 'noc', 'event', 'medal'])
+        medals_count = medals_filtered.groupby(['noc'])['medal'].value_counts().loc[country_dict[country]]
+        
+        total_gold = medals_count.get('Gold', 0)
+        total_silver = medals_count.get('Silver', 0)
+        total_bronze = medals_count.get('Bronze', 0)
+        
+        st.write(f"Total Gold Medals: {total_gold}")
+        st.write(f"Total Silver Medals: {total_silver}")
+        st.write(f"Total Bronze Medals: {total_bronze}")
+else:
+    st.error(f"No data available for {country}")
+    filtered_bios = pd.DataFrame(columns=bios.columns)
+    filtered_results = pd.DataFrame(columns=results.columns)
+    medals_data = pd.DataFrame(columns=['year', 'medal'])
 
 # Medals plot
 st.header("Medals")
-fig, ax = plt.subplots()
-ax.plot(medals_data['year'], medals_data['medal'])
-ax.set_xlabel('Year')
-ax.set_ylabel('Medal Count')
-ax.set_title('Medals by Year')
-st.pyplot(fig)
+if not medals_data.empty:
+    fig, ax = plt.subplots()
+    ax.plot(medals_data['year'], medals_data['medal'],marker='o')
+    ax.set_xlabel('Year')
+    ax.set_ylabel('Medal Count')
+    ax.set_title('Medals by Year')
+    st.pyplot(fig)
+else:
+    st.write("No medal data available")
 
 # Heatmap
-st.header("Heatmap of athletes")
-m = folium.Map(location=[filtered_bios['lat'].mean(), filtered_bios['long'].mean()], zoom_start=2)
-heat_data = [[row['lat'], row['long']] for index, row in filtered_bios.iterrows()]
-HeatMap(heat_data).add_to(m)
-folium_static(m)
+st.header("Birthplaces of the athletes")
+if not filtered_bios.empty:
+    m = folium.Map(location=[filtered_bios['lat'].mean(), filtered_bios['long'].mean()], zoom_start=2)
+    heat_data = [[row['lat'], row['long']] for index, row in filtered_bios.iterrows()]
+    HeatMap(heat_data).add_to(m)
+    folium_static(m)
+else:
+    st.write("No athlete birthplace data available")
 
 # Results table
 st.header("Results")
-st.dataframe(filtered_results)
+if not filtered_results.empty:
+    filtered_results_reset = filtered_results.reset_index(drop=True)
+    
+    # Veri tiplerini kontrol et ve dönüştür
+    for col in filtered_results_reset.columns:
+        if filtered_results_reset[col].dtype == 'object':
+            try:
+                filtered_results_reset[col] = pd.to_numeric(filtered_results_reset[col])
+            except ValueError:
+                pass  # Eğer sayısal dönüşüm yapılamazsa, sütunu olduğu gibi bırak
+        elif filtered_results_reset[col].dtype == 'float64':
+            # Eğer sütun float64 tipindeyse ve tüm değerler tam sayıya dönüştürülebiliyorsa
+            if filtered_results_reset[col].apply(lambda x: x.is_integer()).all():
+                filtered_results_reset[col] = filtered_results_reset[col].astype(int)
+
+    # DataFrame'i göster ve özel sütun konfigürasyonunu uygula
+    st.dataframe(
+        filtered_results_reset,
+        column_config={
+            "year": st.column_config.NumberColumn(
+                "Year",
+                format="%d"
+            ),
+            "athlete_id": st.column_config.NumberColumn(
+                "Athlete ID",
+                format="%d"
+            )
+        }
+    )
+else:
+    st.write("No results data available")
