@@ -10,10 +10,8 @@ from utils import load_nocs, load_bios, load_results, filter_bios, filter_result
 def load_data():
     bios = load_bios()
     results = load_results()
-    nocs = load_nocs()
-    nocs['region'] = nocs['region'].astype(str)
-    country_dict = dict(zip(nocs['region'], nocs['NOC']))
-    countries = sorted(nocs['region'].unique().tolist())
+    nocs, country_dict = load_nocs()
+    countries = sorted(country_dict.keys())
     return bios, results, nocs, country_dict, countries
 
 def create_sidebar(countries):
@@ -36,10 +34,16 @@ def plot_medals(medals_data):
 
 def create_heatmap(filtered_bios):
     if not filtered_bios.empty:
-        m = folium.Map(location=[filtered_bios['lat'].mean(), filtered_bios['long'].mean()], zoom_start=2)
-        heat_data = [[row['lat'], row['long']] for index, row in filtered_bios.iterrows()]
-        HeatMap(heat_data).add_to(m)
-        folium_static(m)
+        # NaN değerleri filtrele
+        valid_data = filtered_bios.dropna(subset=['lat', 'long'])
+        
+        if not valid_data.empty:
+            m = folium.Map(location=[valid_data['lat'].mean(), valid_data['long'].mean()], zoom_start=2)
+            heat_data = [[row['lat'], row['long']] for index, row in valid_data.iterrows()]
+            HeatMap(heat_data).add_to(m)
+            folium_static(m)
+        else:
+            st.write("No valid athlete birthplace data available")
     else:
         st.write("No athlete birthplace data available")
 
@@ -78,8 +82,10 @@ def calculate_medals(filtered_results, country, country_dict):
         medals = filtered_results[(filtered_results['medal'].notna()) & (~filtered_results['event'].str.endswith('(YOG)'))]
         medals_filtered = medals.drop_duplicates(['year', 'type', 'discipline', 'noc', 'event', 'medal'])
         
-        if country_dict[country] in medals_filtered['noc'].values:
-            medals_count = medals_filtered.groupby(['noc'])['medal'].value_counts().loc[country_dict[country]]
+        country_medals = medals_filtered[medals_filtered['noc'].isin(country_dict[country])]
+        
+        if not country_medals.empty:
+            medals_count = country_medals['medal'].value_counts()
 
             total_gold = medals_count.get('Gold', 0)
             total_silver = medals_count.get('Silver', 0)
@@ -93,7 +99,6 @@ def calculate_medals(filtered_results, country, country_dict):
             st.write("No medals data available for this country")
     else:
         st.write("No results data available")
-
 def main():
     st.set_page_config(page_title="Olympic Data Analysis", layout="centered")
     st.title("Olympic Data Analysis")

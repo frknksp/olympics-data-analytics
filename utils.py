@@ -7,7 +7,12 @@ directory = Path(__file__).parent / "clean-data"
 
 @st.cache_data
 def load_nocs():
-    return pd.read_csv(directory / "noc_regions.csv")
+    nocs = pd.read_csv(directory / "noc_regions.csv")
+    # NOC'ları bölgelere göre gruplandır
+    noc_groups = nocs.groupby('region')['NOC'].apply(list).reset_index()
+    # Sözlük oluştur
+    country_dict = dict(zip(noc_groups['region'], noc_groups['NOC']))
+    return nocs, country_dict
 
 @st.cache_data
 def load_bios():
@@ -19,14 +24,14 @@ def load_results():
 
 def filter_bios(bios, country, country_dict):
     if country not in country_dict:
-        return pd.DataFrame(columns=bios.columns)  # Boş bir DataFrame döndür
-    bios = bios[bios['born_country'] == country_dict[country]]
-    return bios[bios['lat'].notna() & bios['long'].notna()]
+        return pd.DataFrame(columns=bios.columns)
+    filtered = bios[bios['born_country'].isin(country_dict[country])]
+    return filtered[filtered['lat'].notna() & filtered['long'].notna()]
 
 def filter_results(df, country, country_dict, include_winter, only_medalists):
     if country not in country_dict:
-        return pd.DataFrame(columns=df.columns)  # Boş bir DataFrame döndür
-    df = df[df['noc'] == country_dict[country]]
+        return pd.DataFrame(columns=df.columns)
+    df = df[df['noc'].isin(country_dict[country])]
     if not include_winter:
         df = df[df['type'] == 'Summer']
     if only_medalists:
@@ -35,11 +40,8 @@ def filter_results(df, country, country_dict, include_winter, only_medalists):
 
 def get_medals(results, country, country_dict):
     if country not in country_dict:
-        return pd.DataFrame(columns=['year', 'medal'])  # Boş bir DataFrame döndür
+        return pd.DataFrame(columns=['year', 'medal'])
     medals = results[(results['medal'].notna()) & (~results['event'].str.endswith('(YOG)'))]
     medals_filtered = medals.drop_duplicates(['year', 'type', 'discipline', 'noc', 'event', 'medal'])
-    medals_by_year = medals_filtered.groupby(['noc', 'year'])['medal'].count()
-    if country_dict[country] not in medals_by_year.index:
-        return pd.DataFrame(columns=['year', 'medal'])  # Boş bir DataFrame döndür
-    medals_by_year = medals_by_year.loc[country_dict[country]]
+    medals_by_year = medals_filtered[medals_filtered['noc'].isin(country_dict[country])].groupby('year')['medal'].count()
     return medals_by_year.reset_index()
